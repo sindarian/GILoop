@@ -14,7 +14,7 @@ import json
 
 from kgae.layers.graph import GraphConvolution
 from custom_layers import CombineConcat, Edge2Node
-from utils import IMAGE_SIZE, GRAPH_SIZE, get_split_graphset, scale_hic, normalise_graphs
+from utils import PATCH_SIZE, GRAPH_SIZE, get_split_graphset, scale_hic, normalise_graphs
 from metrics import compute_auc
 
 
@@ -25,7 +25,7 @@ def gnn_run(chroms, run_id, seed, dataset_name, epoch=50):
     print('#' * 10 + ' Start training GCN ' + '#'*10)
 
     train_graphs, train_features, train_y, val_graphs, val_features, val_y, test_graphs, test_features, test_y = \
-        get_split_graphset(dataset_dir, IMAGE_SIZE, seed, chroms)
+        get_split_graphset(dataset_dir, PATCH_SIZE, seed, chroms)
     graph_upper_bound = np.quantile(train_graphs, 0.996)
     extra_settings = {'graph_upper_bound': graph_upper_bound}
     with open('configs/{}_extra_settings.json'.format(run_id), 'w') as fp:
@@ -68,8 +68,8 @@ def gnn_run(chroms, run_id, seed, dataset_name, epoch=50):
     train_x_tensors = [train_features_tensor, train_graphs_tensor]
     val_x_tensors = [val_features_tensor, val_graphs_tensor]
 
-    flatten_train_y = train_y.reshape((-1, IMAGE_SIZE * IMAGE_SIZE))[..., np.newaxis]
-    flatten_val_y = val_y.reshape((-1, IMAGE_SIZE * IMAGE_SIZE))[..., np.newaxis]
+    flatten_train_y = train_y.reshape((-1, PATCH_SIZE * PATCH_SIZE))[..., np.newaxis]
+    flatten_val_y = val_y.reshape((-1, PATCH_SIZE * PATCH_SIZE))[..., np.newaxis]
 
     # Batch size setup
     bs = 8
@@ -91,34 +91,34 @@ def gnn_run(chroms, run_id, seed, dataset_name, epoch=50):
     H = ReLU()(H)
     # H = Dropout(0.3)(H)
 
-    b = crop_and_mutual_concat(H, GRAPH_SIZE, IMAGE_SIZE, 256)
+    b = crop_and_mutual_concat(H, GRAPH_SIZE, PATCH_SIZE, 256)
     b = Dense(384, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.0001))(b)
     b = Dropout(0.2)(b)
     b = Dense(128, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.0001))(b)
     b = Dropout(0.2)(b)
-    b = Edge2Node(IMAGE_SIZE)(b)
+    b = Edge2Node(PATCH_SIZE)(b)
     b = Dense(256, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.0001))(b)
     b = Dropout(0.2)(b)
 
-    b = crop_and_mutual_concat(b, GRAPH_SIZE, IMAGE_SIZE, 256)
+    b = crop_and_mutual_concat(b, GRAPH_SIZE, PATCH_SIZE, 256)
     b = Dense(384, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.0001))(b)
     b = Dropout(0.2)(b)
     b = Dense(128, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.0001))(b)
     b = Dropout(0.2)(b)
-    b = Edge2Node(IMAGE_SIZE)(b)
+    b = Edge2Node(PATCH_SIZE)(b)
     b = Dense(256, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.0001))(b)
     b = Dropout(0.2)(b)
 
-    b = crop_and_mutual_concat(b, GRAPH_SIZE, IMAGE_SIZE, 256)
+    b = crop_and_mutual_concat(b, GRAPH_SIZE, PATCH_SIZE, 256)
     b = Dense(384, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.0001))(b)
     b = Dropout(0.2)(b)
     b = Dense(128, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.0001))(b)
     b = Dropout(0.2)(b)
-    b = Edge2Node(IMAGE_SIZE)(b)
+    b = Edge2Node(PATCH_SIZE)(b)
     b = Dense(256, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.0001))(b)
     b = Dropout(0.2)(b)
 
-    b = crop_and_mutual_concat(b, GRAPH_SIZE, IMAGE_SIZE, 256)
+    b = crop_and_mutual_concat(b, GRAPH_SIZE, PATCH_SIZE, 256)
     b = Dense(256, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.0001))(b)
     b = Dropout(0.25)(b)
     b = Dense(128, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.0001))(b)
@@ -143,7 +143,7 @@ def gnn_run(chroms, run_id, seed, dataset_name, epoch=50):
             'gnn_sigmoid': tfa.losses.SigmoidFocalCrossEntropy(from_logits=False, alpha=0.5, gamma=1.2,
                                                                reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE)
         },
-        loss_weights={'gnn_sigmoid': IMAGE_SIZE * IMAGE_SIZE},
+        loss_weights={'gnn_sigmoid': PATCH_SIZE * PATCH_SIZE},
         optimizer=tf.keras.optimizers.Adam(learning_rate=gnn_learning_rate),
         metrics={
             'gnn_sigmoid': GNN_METRICS

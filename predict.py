@@ -38,7 +38,7 @@ def run_output_predictions(run_id, model_stage, threshold, target_dataset_name, 
         model = tf.keras.models.load_model(model_path)
         indicator_path = os.path.join(dataset_dir, 'indicators.{}.csv'.format(chrom))
         identical_path = os.path.join(dataset_dir, 'graph_identical.{}.npy'.format(chrom))
-        images, graphs, y, features = read_data_with_motif([chrom], dataset_dir, IMAGE_SIZE)
+        images, graphs, y, features = read_data_with_motif([chrom], dataset_dir, PATCH_SIZE)
         graphs = normalise_graphs(scale_hic(graphs, saved_upper_bound))
         test_y_pred = np.asarray(model.predict([images, features, graphs])[1])
         ys.append(y.flatten())
@@ -51,7 +51,7 @@ def run_output_predictions(run_id, model_stage, threshold, target_dataset_name, 
             y,
             indicator_path,
             identical_path,
-            IMAGE_SIZE
+            PATCH_SIZE
         )
         current_df = get_chrom_pred_df(
             chrom, chrom_proba, threshold,

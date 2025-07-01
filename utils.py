@@ -3,11 +3,17 @@ import os
 import random
 from collections import OrderedDict
 import pandas as pd
+from absl.logging import level_debug
 from sklearn.metrics import f1_score
+from logger import Logger
+import logging
 import cooler
-GRAPH_SIZE = 128
-IMAGE_SIZE = 64
 
+GRAPH_SIZE = 128
+PATCH_SIZE = 64
+# PATCH_SIZE = 32
+FLATTENED_PATCH_SIZE = PATCH_SIZE*PATCH_SIZE
+LOGGER = Logger(name='utils', level=logging.DEBUG).get_logger()
 
 def cool2txt(cooler_path):
     pass
@@ -203,30 +209,43 @@ def read_image_data(chrom_names, data_dir, patch_size):
 
 
 def get_split_imageset(dataset_dir, image_size, seed, chroms):
+    # TODO: doc comment
+
+    # seed the random generators
     random.seed(seed)
     np.random.seed(seed)
+
+    # TODO: explain
     images, y = read_image_data(chroms, dataset_dir, image_size)
 
+    # get all the data indices
+    indices = np.arange(images.shape[0])
+    LOGGER.debug(f'indices: {indices}')
+
+    # define the training data as 80% of the total data
+    #            validation data as 10% of the total data
+    #            test data as the remainder
     train_bound = int(images.shape[0] * 0.8)
     val_bound = int(images.shape[0] * 0.9)
+    LOGGER.debug(f'train_bound: {train_bound}')
+    LOGGER.debug(f'val_bound: {val_bound}')
 
-    indices = np.arange(images.shape[0])
+    # shuffle the indices for randomness
     np.random.shuffle(indices)
 
-    train_indices = indices[:train_bound]
-    train_images = images[train_indices]
-    train_y = y[train_indices]
+    # split the data into train, test, and validation
+    x_train, y_train = split_data(images, y, indices[:train_bound])
+    x_val, y_val = split_data(images, y, indices[train_bound:val_bound])
+    x_test, y_test = split_data(images, y, indices[val_bound:])
 
-    val_indices = indices[train_bound:val_bound]
-    val_images = images[val_indices]
-    val_y = y[val_indices]
+    # return the split data
+    return x_train, y_train, x_val, y_val, x_test, y_test
 
-    test_indices = indices[val_bound:]
-    test_images = images[test_indices]
-    test_y = y[test_indices]
-
-    return train_images, train_y, val_images, val_y, test_images, test_y
-
+def split_data(data, labels, selected_indices):
+    # TODO: explain
+    x = data[selected_indices]
+    y = labels[selected_indices]
+    return x, y
 
 def read_graph_data(chrom_names, data_dir, patch_size):
     total_cnt = 0

@@ -1,7 +1,16 @@
+import plotting
 from sample_patches import run_sample_patches
 from generate_node_features import run_generate_node_features
-from train import train_run
 from predict import run_output_predictions
+import textwrap
+from train import train_run_cnn, train_efficient_net, train_attention_u_net
+# from plotting import plot_metric
+from logger import Logger
+import logging
+
+from utils import PATCH_SIZE
+
+LOGGER = Logger(name='demo_from_processed', level=logging.DEBUG).get_logger()
 
 
 if __name__ == '__main__':
@@ -66,39 +75,46 @@ if __name__ == '__main__':
     ###               The GILoop core algorithm starts from here               ###
     ##############################################################################
 
+    # LOGGER.info('SAMPLING SOURCE CELL LINE - GM12878 w/ hg19')
     # Sample patches for source cell line
-    run_sample_patches(
-        source_dataset_name,
-        source_assembly,
-        source_bedpe_path,
-        source_image_data_dir,
-        source_graph_data_dir,
-        source_chroms)
+    # run_sample_patches(dataset_name=source_dataset_name,
+    #                    assembly=source_assembly,
+    #                    bedpe_path=source_bedpe_path,
+    #                    image_txt_dir=source_image_data_dir,
+    #                    graph_txt_dir=source_graph_data_dir,
+    #                    chroms=source_chroms,
+    #                    patch_size=PATCH_SIZE)
     # Generate the node features for source cell line
-    run_generate_node_features(source_dataset_name, source_chroms, source_assembly)
+    # run_generate_node_features(source_dataset_name, source_chroms, source_assembly)
 
+    # LOGGER.info('Sampling the target cell line - HeLa100 w/ hg38')
     # Sample patches for target cell line
-    run_sample_patches(
-        target_dataset_name,
-        target_assembly,
-        target_bedpe_path,
-        target_image_data_dir,
-        target_graph_data_dir,
-        target_chroms)
+    # run_sample_patches(
+    #     target_dataset_name,
+    #     target_assembly,
+    #     target_bedpe_path,
+    #     target_image_data_dir,
+    #     target_graph_data_dir,
+    #     target_chroms)
     # Generate the node features for target cell line
-    run_generate_node_features(target_dataset_name, target_chroms, target_assembly)
+    # run_generate_node_features(target_dataset_name, target_chroms, target_assembly)
 
-    # Train
-    train_run(source_chroms, run_id, seed, source_dataset_name, epoch=50)
+    LOGGER.info('Training the U-net models')
+    # train_run_cnn(source_chroms, run_id, seed, source_dataset_name, epochs=5)
+    # train_efficient_net(source_chroms, seed, source_dataset_name, epochs=5)
+    train_attention_u_net(source_chroms, seed, source_dataset_name, epochs=1)
 
+    # LOGGER.info('Testing the U-net models')
     # Predict on the target cell line
-    run_output_predictions(
-        run_id,
-        'Finetune',
-        threshold,
-        target_dataset_name,
-        target_assembly,
-        target_chroms,
-        output_path,
-        mode
-    )
+    # run_output_predictions(
+    #     run_id,
+    #     'Finetune',
+    #     threshold,
+    #     target_dataset_name,
+    #     target_assembly,
+    #     target_chroms,
+    #     output_path,
+    #     mode
+    # )
+
+    plotting.plot_training_history('metrics/')

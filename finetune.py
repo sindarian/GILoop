@@ -11,7 +11,7 @@ import tensorflow_addons as tfa
 import json
 
 from custom_layers import CombineConcat, Edge2Node, BilinearFusion
-from utils import IMAGE_SIZE, scale_hic, normalise_graphs, get_split_dataset
+from utils import PATCH_SIZE, scale_hic, normalise_graphs, get_split_dataset
 from metrics import compute_auc
 
 
@@ -34,7 +34,7 @@ def finetune_run(chroms, run_id, seed, dataset_name, epoch=50):
     print('#' * 10 + ' Fine-tuning ' + '#' * 10)
     # seed = hash(run_id)
     train_images, train_graphs, train_features, train_y, val_images, val_graphs, val_features, val_y, test_images, \
-    test_graphs, test_features, test_y = get_split_dataset(dataset_dir, IMAGE_SIZE, seed, chroms)
+    test_graphs, test_features, test_y = get_split_dataset(dataset_dir, PATCH_SIZE, seed, chroms)
 
     graph_upper_bound = np.quantile(train_graphs, 0.996)
 
@@ -81,8 +81,8 @@ def finetune_run(chroms, run_id, seed, dataset_name, epoch=50):
     # train_x_tensors = [train_images_tensor, train_features_tensor, train_graphs_tensor]
     # val_x_tensors = [val_images_tensor, val_features_tensor, val_graphs_tensor]
 
-    flatten_train_y = train_y.reshape((-1, IMAGE_SIZE * IMAGE_SIZE))[..., np.newaxis]
-    flatten_val_y = val_y.reshape((-1, IMAGE_SIZE * IMAGE_SIZE))[..., np.newaxis]
+    flatten_train_y = train_y.reshape((-1, PATCH_SIZE * PATCH_SIZE))[..., np.newaxis]
+    flatten_val_y = val_y.reshape((-1, PATCH_SIZE * PATCH_SIZE))[..., np.newaxis]
 
     train_ds = tf.data.Dataset.from_generator(
         ds_generator(train_images, train_features, train_graphs, flatten_train_y),
@@ -148,7 +148,7 @@ def finetune_run(chroms, run_id, seed, dataset_name, epoch=50):
             'sigmoid_flattened': tfa.losses.SigmoidFocalCrossEntropy(from_logits=False, alpha=0.5, gamma=1.2,
                                                                      reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE)
         },
-        loss_weights={'sigmoid_flattened': IMAGE_SIZE * IMAGE_SIZE},
+        loss_weights={'sigmoid_flattened': PATCH_SIZE * PATCH_SIZE},
         optimizer=tf.keras.optimizers.Adam(learning_rate=complete_learning_rate),
         metrics={
             'sigmoid_flattened': Complete_METRICS
