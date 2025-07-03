@@ -3,7 +3,8 @@ from sample_patches import run_sample_patches
 from generate_node_features import run_generate_node_features
 from predict import run_output_predictions
 import textwrap
-from train import train_run_cnn, train_efficient_net, train_attention_u_net
+from train import train_run_cnn, train_efficient_net, train_attention_efficient_net, \
+    train_cbam_efficient_net
 # from plotting import plot_metric
 from logger import Logger
 import logging
@@ -100,9 +101,10 @@ if __name__ == '__main__':
     # run_generate_node_features(target_dataset_name, target_chroms, target_assembly)
 
     LOGGER.info('Training the U-net models')
-    # train_run_cnn(source_chroms, run_id, seed, source_dataset_name, epochs=5)
-    # train_efficient_net(source_chroms, seed, source_dataset_name, epochs=5)
-    train_attention_u_net(source_chroms, seed, source_dataset_name, epochs=1)
+    # train_run_cnn(source_chroms, run_id, seed, source_dataset_name, epochs=50)
+    train_efficient_net(source_chroms, seed, source_dataset_name, epochs=50)
+    train_cbam_efficient_net(source_chroms, seed, source_dataset_name, epochs=50)
+    train_attention_efficient_net(source_chroms, seed, source_dataset_name, epochs=50)
 
     # LOGGER.info('Testing the U-net models')
     # Predict on the target cell line

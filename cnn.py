@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import logging
 import os
 import numpy as np
 import tensorflow as tf
@@ -11,19 +12,14 @@ from tensorflow.keras.layers import concatenate
 
 import tensorflow_addons as tfa
 
-from tensorflow.keras.applications import (EfficientNetB0, EfficientNetB1, EfficientNetB2, EfficientNetB3,
-                                           EfficientNetB4, EfficientNetB5, EfficientNetB6, EfficientNetB7)
-from tensorflow.keras.layers import Lambda, Resizing
 from tensorflow.keras.models import Model
 
 from custom_layers import HiCScale, CombineConcat, ClipByValue
+from logger import Logger
 from utils import PATCH_SIZE, get_split_imageset
 from metrics import compute_auc
 
-
-
-base_models = [EfficientNetB0, EfficientNetB1, EfficientNetB2, EfficientNetB3, EfficientNetB4,
-               EfficientNetB5, EfficientNetB6, EfficientNetB7]
+LOGGER = Logger(name='cnn', level=logging.DEBUG).get_logger()
 
 def prep_data(train_images, val_images, train_y,val_y ):
     # Data preparation (convert to tensors)
@@ -49,11 +45,6 @@ def compute_metrics(train_y_pred, train_y, val_y_pred, val_y, test_y_pred, test_
     test_auc, test_ap = compute_auc(test_y_pred, test_y.astype('bool'))
 
     return train_auc, train_ap, val_auc, val_ap, test_auc, test_ap
-
-def print_and_save_metrics(model, run_id, train_auc, train_ap, val_auc, val_ap, test_auc, test_ap):
-    print('Train AUC is {}. Train AP is {}.'.format(train_auc, train_ap))
-    print('Validation AUC is {}. Validation AP is {}.'.format(val_auc, val_ap))
-    print('Test AUC is {}. Test AP is {}.'.format(test_auc, test_ap))
 
 def build_cnn(image_upper_bound, cnn_learning_rate, CNN_METRICS):
     I = Input(shape=(PATCH_SIZE, PATCH_SIZE))
@@ -186,7 +177,7 @@ def build_cnn(image_upper_bound, cnn_learning_rate, CNN_METRICS):
                    kernel_regularizer=tf.keras.regularizers.l2(0.0001))(conv9)
     conv10 = conv9
 
-    image_embedding = Reshape((PATCH_SIZE * PATCH_SIZE, -1), name='cnn_embedding')(conv10)
+    image_embedding = Reshape((PATCH_SIZE * PATCH_SIZE, -1), name='embedding')(conv10)
     image_decode = ReLU()(image_embedding)
     image_decode = Dropout(0.3)(image_decode)
     image_decode = Dense(32,
@@ -202,21 +193,21 @@ def build_cnn(image_upper_bound, cnn_learning_rate, CNN_METRICS):
                          kernel_regularizer=tf.keras.regularizers.l2(0.0001))(image_decode)
     image_decode = Dropout(0.3)(image_decode)
     cnn_logits = Dense(1,
-                       name='cnn_logits',
+                       name='logits',
                        kernel_regularizer=tf.keras.regularizers.l2(0.0001))(image_decode)
     cnn_sigmoid = Activation('sigmoid',
-                             name='cnn_sigmoid')(cnn_logits)
+                             name='sigmoid')(cnn_logits)
 
     CNN = Model(inputs=[I], outputs=[cnn_logits, cnn_sigmoid])
     CNN.compile(
         loss={
-            'cnn_sigmoid': tfa.losses.SigmoidFocalCrossEntropy(from_logits=False, alpha=0.5, gamma=1.2,
+            'sigmoid': tfa.losses.SigmoidFocalCrossEntropy(from_logits=False, alpha=0.5, gamma=1.2,
                                                                reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE)
         },
-        loss_weights={'cnn_sigmoid': PATCH_SIZE * PATCH_SIZE},
+        loss_weights={'sigmoid': PATCH_SIZE * PATCH_SIZE},
         optimizer=tf.keras.optimizers.Adam(learning_rate=cnn_learning_rate),
         metrics={
-            'cnn_sigmoid': CNN_METRICS
+            'sigmoid': CNN_METRICS
         }
     )
 
@@ -226,11 +217,8 @@ def build_cnn(image_upper_bound, cnn_learning_rate, CNN_METRICS):
 
 
 def cnn_run(chroms, run_id, seed, dataset_name, epoch=50):
-    print(textwrap.dedent(f'''
-            #################################################
-            #            Building/Training the CNN          #
-            #################################################'''))
-    dataset_dir = os.path.join('dataset', dataset_name)
+    LOGGER.info('Building/Training the CNN')
+    dataset_dir = 'dataset_ps64_res10000/' + dataset_name
     # seed = hash(run_id)
     train_images, train_y, val_images, val_y, test_images, test_y = \
         get_split_imageset(dataset_dir, PATCH_SIZE, seed, chroms)
@@ -270,134 +258,26 @@ def cnn_run(chroms, run_id, seed, dataset_name, epoch=50):
                       epochs=epoch,
                       validation_data=([val_x_tensors[0]], [flatten_val_y, flatten_val_y]),
                       callbacks=[early_stop],
-                      verbose=2)
+                      verbose=1)
 
     # make predictions
-    train_y_pred, val_y_pred, test_y_pred = predict(CNN, train_x_tensors, val_x_tensors, test_images)
+    train_y_pred, val_y_pred, test_y_pred = predict(cnn, train_x_tensors, val_x_tensors, test_images)
 
     # compute metrics
     train_auc, train_ap, val_auc, val_ap, test_auc, test_ap = \
         compute_metrics(train_y_pred, train_y, val_y_pred, val_y, test_y_pred, test_y)
 
     # print and save
-    print('=' * 30)
-    print('*******CNN**********')
-    print_and_save_metrics(cnn, run_id, train_auc, train_ap, val_auc, val_ap, test_auc, test_ap)
-    with open('metrics/cnn/cnn_training_metrics.json', 'w') as f:
+    LOGGER.info('CNN Train AUC={} | Train AP={}'.format(train_auc, train_ap))
+    LOGGER.info('CNN Validation AUC={} | Validation AP={}'.format(val_auc, val_ap))
+    LOGGER.info('CNN Test AUC={} | Test AP={}'.format(test_auc, test_auc))
+    with open('metrics/cnn_training_metrics.json', 'w') as f:
         json.dump(history.history, f)
-    with open('metrics/cnn/cnn_computed_metrics.json', 'w') as f:
-        json.dump({'train_auc': train_auc,
-                        'train_ap':train_ap,
-                        'val_auc':val_auc,
-                        'val_ap':val_ap,
-                        'test_auc':test_auc,
-                        'test_ap':test_ap}, f)
+    # with open('metrics/cnn_computed_metrics.json', 'w') as f:
+    #     json.dump({'train_auc': train_auc,
+    #                     'train_ap':train_ap,
+    #                     'val_auc':val_auc,
+    #                     'val_ap':val_ap,
+    #                     'test_auc':test_auc,
+    #                     'test_ap':test_ap}, f)
     cnn.save('models/cnn.h5')
-
-def efficient_net_run(chroms, run_id, seed, dataset_name, efficient_net_id, adjust_weights=False, epoch=50):
-    print(textwrap.dedent(f'''
-                #################################################
-                #      Building/Training EfficientNet{efficient_net_id}          #
-                #################################################'''))
-
-    learning_rate = tf.keras.optimizers.schedules.PolynomialDecay(0.001,
-                                                                  2000 * 20,
-                                                                  end_learning_rate=0.00005,
-                                                                  power=2.0)
-
-    dataset_dir = os.path.join('dataset', dataset_name)
-
-    (train_images, train_y,
-     val_images, val_y,
-     test_images, test_y) = get_split_imageset(dataset_dir, PATCH_SIZE, seed, chroms)
-
-    (train_x_tensors, val_x_tensors,
-     train_y, val_y,
-     flatten_train_y, flatten_val_y) = prep_data(train_images, val_images, train_y, val_y)
-
-    image_upper_bound = np.quantile(train_images, 0.996)
-
-    model = build_efficient_net(image_upper_bound,
-                                learning_rate,
-                                metrics,
-                                adjust_weights=adjust_weights,
-                                in_shape=in_shape)
-
-    inputs = [train_x_tensors[0]]
-    history = model.fit(inputs,
-                      y=[flatten_train_y, flatten_train_y],
-                      batch_size=8,
-                      epochs=epoch,
-                      validation_data=([val_x_tensors[0]], [flatten_val_y, flatten_val_y]),
-                      verbose=2)
-
-    # make predictions
-    train_y_pred, val_y_pred, test_y_pred = predict(model, train_x_tensors, val_x_tensors, test_images)
-
-    # compute metrics
-    (train_auc, train_ap,
-     val_auc, val_ap,
-     test_auc, test_ap) = compute_metrics(train_y_pred, train_y, val_y_pred, val_y, test_y_pred, test_y)
-
-    with open(f'metrics/{model_name}/{model_name}_fit_metrics.json', 'w') as f:
-        json.dump(history.history, f)
-    with open(f'metrics/{model_name}/{model_name}_computed_metrics.json', 'w') as f:
-        json.dump({'train_auc': train_auc,
-                        'train_ap':train_ap,
-                        'val_auc':val_auc,
-                        'val_ap':val_ap,
-                        'test_auc':test_auc,
-                        'test_ap':test_ap}, f)
-    model.save(f'models/{model_name}.h5')
-
-    # print and save
-    print('=' * 30)
-    print(f'*******{model_name}**********')
-    print_and_save_metrics(model, run_id, train_auc, train_ap, val_auc, val_ap, test_auc, test_ap)
-
-def build_efficient_net(image_upper_bound, learning_rate, metrics, adjust_weights=False, in_shape=(224, 224)):
-    base_model = EfficientNetB0(include_top=False,
-                                weights='imagenet',
-                                pooling='max')
-    base_model.trainable = adjust_weights
-
-    # Input and preprocessing layers
-    I = Input(shape=(PATCH_SIZE, PATCH_SIZE), name='input_image')
-    x = ClipByValue(image_upper_bound)(I)
-    x = Rescaling(1.0 / image_upper_bound)(x)
-    x = Reshape((PATCH_SIZE, PATCH_SIZE, 1))(x)
-    x = GaussianNoise(0.05)(x)
-    x = concatenate([x, x, x], axis=-1)
-    # x = concatenate([I,I,I], axis=-1)
-    x = Resizing(in_shape[0], in_shape[1])(x)
-    # x = Lambda(preprocess_input, name='efficientnet_preprocess')(x)
-
-    # Encoder layers
-    x = base_model(x)
-    x = ReLU()(x)
-    x = Dense(units=32,
-              activation='relu')(x)
-    x = Dense(units=16,
-              activation='relu')(x)
-    x = Dense(units=8,
-              activation='relu')(x)
-    x = Dense(units=1,
-              activation='relu')(x)
-    sigmoid = Activation('sigmoid', name='sigmoid')(x)
-    efn = Model(inputs=[I], outputs=[sigmoid])
-
-    efn.compile(
-        loss={
-            'sigmoid': tfa.losses.SigmoidFocalCrossEntropy(from_logits=False,
-                                                           alpha=0.5,
-                                                           gamma=1.2,
-                                                           reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE)
-        },
-        loss_weights={'sigmoid': PATCH_SIZE * PATCH_SIZE},
-        optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
-        metrics={'sigmoid': metrics}
-    )
-
-    efn.summary()
-
-    return efn

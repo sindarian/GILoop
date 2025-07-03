@@ -21,6 +21,13 @@ from utils import PATCH_SIZE
 #                              AUC(curve="PR", name='PR_AUC')
 #                              ]
 #                  }
+#
+# # use validation AUC of precision-recall for stopping
+# EARLY_STOP = tf.keras.callbacks.EarlyStopping(monitor='val_PR_AUC',
+#                                               min_delta=0.0001,
+#                                               patience=5,
+#                                               verbose=1,
+#                                               mode='max')
 
 # plot 1 metrics
 OPTIMIZER = Adam(learning_rate=PolynomialDecay(initial_learning_rate=0.001,
@@ -36,5 +43,11 @@ LOSS = {'sigmoid': SigmoidFocalCrossEntropy(from_logits=False,
 METRICS = {'sigmoid': [BinaryAccuracy(name='binary_accuracy', threshold=0.5),
                              AUC(curve="ROC", name='ROC_AUC'),
                              AUC(curve="PR", name='PR_AUC')
-                             ]
-                 }
+                       ]
+           }
+# use validation AUC of precision-recall for stopping
+EARLY_STOP = tf.keras.callbacks.EarlyStopping(monitor='val_PR_AUC',
+                                              min_delta=0.0001,
+                                              patience=5,
+                                              verbose=1,
+                                              mode='max')
